@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Job Application Bot</title>
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb}
+body{margin:0}header{background:#172554;color:white;padding:22px 5vw}
+main{max-width:1100px;margin:24px auto;padding:0 16px;display:grid;gap:18px}
+.card{background:white;border:1px solid #dce2ee;border-radius:14px;padding:18px;box-shadow:0 2px 8px #14213d0a}
+h1{margin:0 0 6px;font-size:24px}h2{font-size:18px;margin:0 0 14px}
+p{color:#5b6475}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+label{display:block;font-size:13px;font-weight:650;margin:8px 0 5px}
+input,textarea,select{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
+textarea{min-height:80px}button{border:0;border-radius:8px;padding:10px 13px;background:#1d4ed8;color:white;font-weight:650;cursor:pointer;margin:6px 5px 0 0}
+button.secondary{background:#e8eefb;color:#173477}button.warn{background:#b45309}
+.small{font-size:12px;color:#687386}.job{border-top:1px solid #e2e8f0;padding:14px 0}.job:first-child{border-top:0}
+.pill{display:inline-block;background:#eef2ff;color:#3730a3;padding:3px 8px;border-radius:999px;font-size:12px}
+#message{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;font-size:13px}
+a{color:#1d4ed8}
+</style></head>
+<body>
+<header><h1>AI Job Application Bot</h1><div>Discover → tailor PDF → prepare application → review → submit manually</div></header>
+<main>
+<section class="card"><h2>Add a job</h2>
+<form id="jobForm">
+<div class="grid">
+<div><label>Job title</label><input name="title" required placeholder="Software Engineer I"></div>
+<div><label>Company</label><input name="company" required placeholder="Company name"></div>
+<div><label>Location</label><input name="location" placeholder="Bengaluru"></div>
+<div><label>Official application URL (HTTPS)</label><input name="url" type="url" required placeholder="https://careers.company.com/job"></div>
+</div><label>Job description</label><textarea name="description" placeholder="Paste the official job description"></textarea>
+<button type="submit">Add job</button>
+</form></section>
+<section class="card"><h2>Discover jobs from Gmail</h2><p>Read-only Gmail OAuth. First use requires local Google OAuth credentials.</p>
+<label>Gmail search query</label><input id="gmailQuery" value='newer_than:14d (job OR hiring OR careers OR vacancy)'>
+<button id="gmailBtn">Read matching emails</button><div id="gmailResults"></div></section>
+<section class="card"><h2>Tracked jobs</h2><button class="secondary" id="refreshBtn">Refresh list</button><div id="jobs">Loading…</div></section>
+<section class="card"><h2>Activity / messages</h2><div id="message">Ready.</div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});let data;try{data=await r.json()}catch{data=await r.text()}if(!r.ok)throw new Error(typeof data==='string'?data:JSON.stringify(data));return data}
+function msg(x){$('message').textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
+$('jobForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{const x=await api('/jobs',{method:'POST',body:JSON.stringify(d)});msg({added:x});e.target.reset();await refresh()}catch(err){msg(err.message)}});
+$('refreshBtn').onclick=refresh;
+$('gmailBtn').onclick=async()=>{ $('gmailResults').textContent='Reading Gmail…';try{const q=encodeURIComponent($('gmailQuery').value);const x=await api('/gmail/jobs?query='+q);$('gmailResults').innerHTML='<p>Found '+x.count+' email(s). Review each message and verify jobs on official employer sites before adding.</p>';x.emails.forEach(e=>{const d=document.createElement('details');const s=document.createElement('summary');s.textContent=e.subject+' — '+e.from;d.appendChild(s);const p=document.createElement('pre');p.style.whiteSpace='pre-wrap';p.textContent=(e.body_excerpt||'').slice(0,3000)+'\\n\\nLinks:\\n'+(e.links||[]).join('\\n');d.appendChild(p);$('gmailResults').appendChild(d)})}catch(err){$('gmailResults').textContent=err.message}};
+async function action(id,act){try{let x;if(act==='resume')x=await api('/jobs/'+id+'/resume',{method:'POST'});else if(act==='prepare')x=await api('/jobs/'+id+'/prepare',{method:'POST'});else if(act.startsWith('status:'))x=await api('/jobs/'+id+'/status',{method:'POST',body:JSON.stringify({status:act.split(':')[1]})});msg(x);await refresh()}catch(err){msg(err.message)}}
+async function refresh(){try{const jobs=await api('/jobs');$('jobs').innerHTML='';if(!jobs.length){$('jobs').textContent='No jobs yet. Add one above or import leads from Gmail.';return}jobs.forEach(j=>{const d=document.createElement('div');d.className='job';const title=document.createElement('strong');title.textContent=j.title+' — '+j.company;d.appendChild(title);const meta=document.createElement('div');meta.innerHTML='<span class="pill"></span> ';meta.querySelector('.pill').textContent=j.status;d.appendChild(meta);const loc=document.createElement('p');loc.textContent=(j.location||'Location not set')+' · '+j.url;d.appendChild(loc);const desc=document.createElement('p');desc.textContent=(j.description||'').slice(0,280);d.appendChild(desc);const link=document.createElement('a');link.href=j.url;link.target='_blank';link.rel='noopener';link.textContent='Open official listing';d.appendChild(link);d.appendChild(document.createElement('br'));[['Generate PDF','resume'],['Prepare form (no submit)','prepare'],['Mark applied','status:applied'],['Mark needs manual work','status:needs_manual_work']].forEach(([label,act])=>{const b=document.createElement('button');b.textContent=label;if(act!=='resume')b.className='secondary';if(act==='prepare')b.className='warn';b.onclick=()=>action(j.id,act);d.appendChild(b)});if(j.resume_path){const a=document.createElement('a');a.href='/jobs/'+j.id+'/resume.pdf';a.textContent='Download tailored PDF';a.style.marginLeft='8px';d.appendChild(a)}$('jobs').appendChild(d)})}catch(err){$('jobs').textContent=err.message}}
+refresh();
+</script></body></html>

@@ -1,0 +1,29 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/jobs.db
+data/gmail-token.json
+credentials/
+data/resumes/*.pdf
+
+# Secrets and private configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Personal data and generated files
+data/profile.json
+data/resumes/
+*.pdf
+*.sqlite3
+*.db
+
+# Uploaded archive
+ai_job_application_bot_complete_starter.zip
+__pycache__/
+*.py[cod]
+.venv/
+venv/
