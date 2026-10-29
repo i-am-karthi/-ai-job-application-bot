@@ -62,6 +62,7 @@ def activity(job_id:int):
 import json
 import hmac
 import base64
+from urllib.parse import parse_qs
 from fastapi import Request
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -76,29 +77,12 @@ GOOGLE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 @app.middleware("http")
 async def protect_app(request: Request, call_next):
-    if request.url.path not in {"/gmail/callback", "/health"}:
-        if not APP_USERNAME or not APP_PASSWORD:
-            return PlainTextResponse(
-                "Set APP_USERNAME and APP_PASSWORD in Render.",
-                status_code=503,
-            )
-        auth = request.headers.get("authorization", "")
-        valid = False
-        if auth.startswith("Basic "):
-            try:
-                user, password = base64.b64decode(auth[6:]).decode().split(":", 1)
-                valid = (
-                    hmac.compare_digest(user, APP_USERNAME)
-                    and hmac.compare_digest(password, APP_PASSWORD)
-                )
-            except Exception:
-                pass
-        if not valid:
-            return PlainTextResponse(
-                "Login required.",
-                status_code=401,
-                headers={"WWW-Authenticate": 'Basic realm="AI Job Application Bot"'},
-            )
+    if request.url.path in {"/login", "/gmail/callback", "/health"}:
+        return await call_next(request)
+    if not APP_USERNAME or not APP_PASSWORD:
+        return PlainTextResponse("Login credentials are not configured.", status_code=503)
+    if not request.session.get("authenticated"):
+        return RedirectResponse("/login", status_code=303)
     return await call_next(request)
 
 app.add_middleware(
@@ -161,3 +145,42 @@ async def search_jobs(q: str = "software engineer Python AI", location: str = "B
         return await search_public_jobs(q, location, count)
     except Exception as e:
         raise HTTPException(400, str(e))
+
+
+# PHONE_FRIENDLY_LOGIN_ROUTES
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return """<!doctype html><html><head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Login</title><style>
+    body{font:16px Arial;background:#f1f5f9;display:grid;place-items:center;min-height:100vh;margin:0}
+    form{background:white;padding:28px;border-radius:14px;width:min(320px,80%)}
+    input,button{box-sizing:border-box;width:100%;padding:13px;margin-top:12px;border-radius:8px}
+    input{border:1px solid #ccc}button{background:#2563eb;color:white;border:0}
+    </style></head><body><form method="post" action="/login">
+    <h2>AI Job Application Bot</h2>
+    <input name="username" placeholder="Username" autocomplete="username" required>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Log in</button></form></body></html>"""
+
+@app.post("/login")
+async def login_submit(request: Request):
+    if not APP_USERNAME or not APP_PASSWORD:
+        raise HTTPException(503, "Login credentials are not configured.")
+    fields = parse_qs((await request.body()).decode("utf-8"))
+    username = fields.get("username", [""])[0]
+    password = fields.get("password", [""])[0]
+    if not (hmac.compare_digest(username, APP_USERNAME)
+            and hmac.compare_digest(password, APP_PASSWORD)):
+        return HTMLResponse(
+            '<p>Invalid username or password.</p><a href="/login">Try again</a>',
+            status_code=401,
+        )
+    request.session.clear()
+    request.session["authenticated"] = True
+    return RedirectResponse("/", status_code=303)
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
