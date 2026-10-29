@@ -58,6 +58,97 @@ def status(job_id:int,body:StatusUpdate):
 def activity(job_id:int):
     if not get_job(job_id): raise HTTPException(404,"Job not found")
     return get_activity(job_id)
+
+import json
+import hmac
+import base64
+from fastapi import Request
+from fastapi.responses import RedirectResponse, PlainTextResponse
+from starlette.middleware.sessions import SessionMiddleware
+from google_auth_oauthlib.flow import Flow
+from app.config import GOOGLE_TOKEN_FILE
+
+SESSION_SECRET = os.getenv("SESSION_SECRET", "")
+APP_USERNAME = os.getenv("APP_USERNAME", "")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+GOOGLE_CLIENT_CONFIG = os.getenv("GOOGLE_OAUTH_CLIENT_CONFIG", "")
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+@app.middleware("http")
+async def protect_app(request: Request, call_next):
+    if request.url.path not in {"/gmail/callback", "/health"}:
+        if not APP_USERNAME or not APP_PASSWORD:
+            return PlainTextResponse(
+                "Set APP_USERNAME and APP_PASSWORD in Render.",
+                status_code=503,
+            )
+        auth = request.headers.get("authorization", "")
+        valid = False
+        if auth.startswith("Basic "):
+            try:
+                user, password = base64.b64decode(auth[6:]).decode().split(":", 1)
+                valid = (
+                    hmac.compare_digest(user, APP_USERNAME)
+                    and hmac.compare_digest(password, APP_PASSWORD)
+                )
+            except Exception:
+                pass
+        if not valid:
+            return PlainTextResponse(
+                "Login required.",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="AI Job Application Bot"'},
+            )
+    return await call_next(request)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET or "disabled-until-secret-is-set",
+    https_only=True,
+    same_site="lax",
+)
+
+def create_oauth_flow(request: Request, state=None):
+    if not SESSION_SECRET:
+        raise HTTPException(503, "Set SESSION_SECRET in Render.")
+    if not GOOGLE_CLIENT_CONFIG:
+        raise HTTPException(503, "Set GOOGLE_OAUTH_CLIENT_CONFIG in Render.")
+    try:
+        config = json.loads(GOOGLE_CLIENT_CONFIG)
+    except json.JSONDecodeError:
+        raise HTTPException(500, "Google OAuth client config is not valid JSON.")
+    flow = Flow.from_client_config(config, scopes=GOOGLE_SCOPES, state=state)
+    flow.redirect_uri = str(request.base_url).rstrip("/") + "/gmail/callback"
+    return flow
+
+@app.get("/gmail/connect")
+def gmail_connect(request: Request):
+    flow = create_oauth_flow(request)
+    url, state = flow.authorization_url(
+        access_type="offline",
+        prompt="consent",
+        include_granted_scopes="true",
+    )
+    request.session["oauth_state"] = state
+    return RedirectResponse(url)
+
+@app.get("/gmail/callback")
+def gmail_callback(
+    request: Request, state: str = "", code: str = "", error: str = ""
+):
+    if error:
+        raise HTTPException(400, "Google authorization was cancelled or denied.")
+    expected = request.session.pop("oauth_state", None)
+    if not expected or not hmac.compare_digest(str(expected), str(state)):
+        raise HTTPException(400, "OAuth state mismatch. Retry Gmail connection.")
+    flow = create_oauth_flow(request, state=state)
+    flow.fetch_token(code=code)
+    os.makedirs(os.path.dirname(GOOGLE_TOKEN_FILE) or ".", exist_ok=True)
+    with open(GOOGLE_TOKEN_FILE, "w", encoding="utf-8") as f:
+        f.write(flow.credentials.to_json())
+    return RedirectResponse("/", status_code=303)
+
+
 @app.get("/gmail/jobs")
 def gmail_jobs(query:str="newer_than:14d (job OR hiring OR careers OR vacancy)",max_results:int=20):
     try: return {"count":len(emails:=fetch_job_emails(query,max_results)),"emails":emails,"notice":"Links are unverified leads; check the official employer listing before applying."}
