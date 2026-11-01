@@ -74,3 +74,16 @@ Run `uvicorn app.main:app --reload`, then open `http://127.0.0.1:8000/` for the 
 Optional public job search uses Brave Search API. Add `BRAVE_SEARCH_API_KEY` to `.env`, install requirements, then visit `/docs` and call `GET /search/jobs?q=software%20engineer%20Python&location=Bengaluru`. Search results are leads only and must be verified against official employer listings. Never use search snippets as proof that a vacancy is active.
 
 The current application-preparation adapter is generic and may not fill every employer's forms. The dashboard includes a manual status update action; only mark a job applied after you actually submit it yourself.
+
+
+## Hosted AI-assisted application workflow
+
+The dashboard has a **Your verified candidate profile** editor. Save accurate facts there first; it is required for tailored resumes and profile-backed form filling. The LLM tailors resume wording from those facts when `LLM_API_KEY` and `LLM_MODEL` are configured. Without an LLM key, it generates a baseline resume from the saved profile.
+
+For Render, configure the service build command to install the Chromium browser used by Playwright:
+```sh
+pip install -r requirements.txt && playwright install chromium
+```
+The app now defaults Playwright to headless mode; set `PLAYWRIGHT_HEADLESS=true` explicitly if desired. Keep the profile, database, resumes, and Gmail token on a Render persistent disk by setting `PROFILE_PATH`, `DATABASE_PATH`, `RESUME_DIR`, and `GOOGLE_TOKEN_FILE` to paths on that disk. Without persistent storage, these files can be lost when the service is replaced or restarted.
+
+For each job, generate the tailored PDF, choose **Prepare with AI**, review the field summary and screenshot, then explicitly confirm **Submit application** if you want to send it. The generic browser flow fills only clear matches to saved contact/profile facts. It leaves sensitive, legal, consent, checkbox, and unsupported questions for you. It stops on CAPTCHA/MFA, missing required answers, or an ambiguous submit button. It does not bypass access controls. Employer sites vary, so this cannot promise successful automated applications everywhere; inspect the employer's confirmation page after each submission and only then mark the job applied.
