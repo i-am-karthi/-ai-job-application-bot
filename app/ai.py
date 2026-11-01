@@ -66,12 +66,12 @@ def extract_job_leads(emails: list[dict]) -> list[dict]:
             "subject": email.get("subject", ""),
             "sender": email.get("from", ""),
             "date": str(email.get("date", ""))[:80],
-            "excerpt": str(email.get("body_excerpt", "") or "")[:600],
-            "links": [url for url in links if len(url) <= 500][:5],
+            "excerpt": str(email.get("body_excerpt", "") or "")[:200],
+            "links": [url for url in links if len(url) <= 500][:2],
         })
     response = client.chat.completions.create(
         model=GROQ_MODEL,
-        max_completion_tokens=1200,
+        max_completion_tokens=800,
         temperature=0,
         response_format={"type": "json_object"},
         messages=[
