@@ -57,7 +57,7 @@ def detail(job_id:int):
 def make_resume(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
-    path=build_resume(j); update_job(job_id,resume_path=path,status="resume_ready"); log_event(job_id,"resume_created",path)
+    path=build_resume(j)\n    fields={"resume_path":path}\n    if j.get("status") not in {"verified","awaiting_review"}: fields["status"]="resume_ready"\n    update_job(job_id,**fields); log_event(job_id,"resume_created",path)
     return {"job_id":job_id,"resume_path":path,"download_url":f"/jobs/{job_id}/resume.pdf"}
 @app.get("/jobs/{job_id}/resume.pdf")
 def get_resume(job_id:int):
@@ -68,7 +68,7 @@ def get_resume(job_id:int):
 def prepare(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
-    if j.get("source")=="gmail_ai" and j.get("status")!="verified": raise HTTPException(400,"Verify the official employer listing and mark it verified before preparing.")
+    if j.get("source")=="gmail_ai" and j.get("status") not in {"verified","awaiting_review"}: raise HTTPException(400,"Verify the official employer listing and mark it verified before preparing.")
     if not os.path.exists(PROFILE_PATH): raise HTTPException(400,"Save your verified candidate profile first.")
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
