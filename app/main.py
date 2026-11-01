@@ -57,7 +57,10 @@ def detail(job_id:int):
 def make_resume(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
-    path=build_resume(j)\n    fields={"resume_path":path}\n    if j.get("status") not in {"verified","awaiting_review"}: fields["status"]="resume_ready"\n    update_job(job_id,**fields); log_event(job_id,"resume_created",path)
+    path=build_resume(j)
+    fields={"resume_path":path}
+    if j.get("status") not in {"verified","awaiting_review"}: fields["status"]="resume_ready"
+    update_job(job_id,**fields); log_event(job_id,"resume_created",path)
     return {"job_id":job_id,"resume_path":path,"download_url":f"/jobs/{job_id}/resume.pdf"}
 @app.get("/jobs/{job_id}/resume.pdf")
 def get_resume(job_id:int):
