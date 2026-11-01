@@ -76,7 +76,7 @@ def submit_application(job,resume_path):
                 if not (required.nth(i).input_value() or "").strip(): missing+=1
             except Exception: missing+=1
         # Never auto-accept a required checkbox (including consent/terms).
-        checks=page.locator('input[type="checkbox"][required]:visible')
+        checks=page.locator('input[type="checkbox"]:visible')
         for i in range(checks.count()):
             if not checks.nth(i).is_checked(): missing+=1
         if missing:
