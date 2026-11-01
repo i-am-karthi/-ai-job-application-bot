@@ -67,6 +67,7 @@ def get_resume(job_id:int):
 def prepare(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
+    if not os.path.exists(PROFILE_PATH): raise HTTPException(400,"Save your verified candidate profile first.")
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
     result=prepare_application(j,j["resume_path"])
