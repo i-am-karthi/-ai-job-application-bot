@@ -10,7 +10,7 @@ RESUME_DIR = os.getenv("RESUME_DIR", "data/resumes")
 
 # Browser automation
 PLAYWRIGHT_HEADLESS = (
-    os.getenv("PLAYWRIGHT_HEADLESS", "false").lower() == "true"
+    os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
 )
 
 # Gmail OAuth configuration
