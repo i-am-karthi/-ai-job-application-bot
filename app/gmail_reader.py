@@ -1,21 +1,34 @@
 import os,base64,re
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from app.config import GOOGLE_OAUTH_CLIENT_SECRET_FILE,GOOGLE_TOKEN_FILE
+from app.config import GOOGLE_TOKEN_FILE
+
 SCOPES=["https://www.googleapis.com/auth/gmail.readonly"]
 
+def _save_credentials(creds):
+    os.makedirs(os.path.dirname(GOOGLE_TOKEN_FILE) or ".",exist_ok=True)
+    with open(GOOGLE_TOKEN_FILE,"w",encoding="utf-8") as f:
+        f.write(creds.to_json())
+
 def service():
-    creds=None
-    if os.path.exists(GOOGLE_TOKEN_FILE): creds=Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE,SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token: creds.refresh(Request())
+    # On Render, OAuth is completed by /gmail/connect and /gmail/callback.
+    # Do not try InstalledAppFlow.run_local_server() on a hosted web service.
+    if not os.path.exists(GOOGLE_TOKEN_FILE):
+        raise RuntimeError("Gmail is not connected. Click Connect Gmail, approve read-only access, then retry.")
+    try:
+        creds=Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE,SCOPES)
+    except (OSError,ValueError):
+        raise RuntimeError("Saved Gmail token is unreadable. Click Connect Gmail to reconnect.")
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                _save_credentials(creds)
+            except Exception:
+                raise RuntimeError("Gmail authorization expired. Click Connect Gmail to reconnect.")
         else:
-            if not os.path.exists(GOOGLE_OAUTH_CLIENT_SECRET_FILE): raise RuntimeError("OAuth client JSON missing; follow README Gmail setup.")
-            flow=InstalledAppFlow.from_client_secrets_file(GOOGLE_OAUTH_CLIENT_SECRET_FILE,SCOPES); creds=flow.run_local_server(port=0)
-        os.makedirs(os.path.dirname(GOOGLE_TOKEN_FILE) or ".",exist_ok=True)
-        with open(GOOGLE_TOKEN_FILE,"w",encoding="utf-8") as f: f.write(creds.to_json())
+            raise RuntimeError("Gmail authorization expired. Click Connect Gmail to reconnect.")
     return build("gmail","v1",credentials=creds,cache_discovery=False)
 
 def text_part(p):
@@ -24,7 +37,7 @@ def text_part(p):
     if data:
         try: txt=base64.urlsafe_b64decode(data+"==").decode("utf-8",errors="ignore")
         except Exception: pass
-    for c in p.get("parts",[]): txt += "\n"+text_part(c)
+    for c in p.get("parts",[]): txt+="\n"+text_part(c)
     return txt
 
 def fetch_job_emails(query="newer_than:14d (job OR hiring OR careers OR vacancy)",max_results=20):
