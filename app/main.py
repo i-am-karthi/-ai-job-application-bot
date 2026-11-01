@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from app.db import init_db,add_job,list_jobs,get_job,update_job,get_activity,log_event
 from app.schemas import JobCreate,StatusUpdate,SubmitRequest
 from app.resume import build_resume
+from app.ai import extract_job_leads
 from app.gmail_reader import fetch_job_emails
 from app.browser import prepare_application, submit_application
 from app.job_search import search_public_jobs
@@ -67,6 +68,7 @@ def get_resume(job_id:int):
 def prepare(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
+    if j.get("source")=="gmail_ai" and j.get("status")!="verified": raise HTTPException(400,"Verify the official employer listing and mark it verified before preparing.")
     if not os.path.exists(PROFILE_PATH): raise HTTPException(400,"Save your verified candidate profile first.")
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
@@ -196,6 +198,28 @@ def gmail_jobs(query:str="newer_than:14d (job OR hiring OR careers OR vacancy)",
     try: return {"count":len(emails:=fetch_job_emails(query,max_results)),"emails":emails,"notice":"Links are unverified leads; check the official employer listing before applying."}
     except Exception as e: raise HTTPException(400,str(e))
 
+
+@app.post("/gmail/auto-import")
+def gmail_auto_import(query:str="newer_than:14d (job OR hiring OR careers OR vacancy)",max_results:int=20):
+    try:
+        emails=fetch_job_emails(query,min(max_results,50))
+        leads=extract_job_leads(emails)
+    except RuntimeError as e:
+        raise HTTPException(503,str(e))
+    except Exception as e:
+        raise HTTPException(502,"Gmail AI extraction failed: "+str(e)[:400])
+    imported=[]; duplicates=0
+    for lead in leads:
+        try:
+            job=add_job({**lead,"url":lead["url"],"source":"gmail_ai"})
+            imported.append({"job_id":job["id"],"title":job["title"],"company":job["company"],"url":job["url"],"email_subject":lead["email_subject"]})
+        except Exception as e:
+            if "UNIQUE constraint failed" in str(e):
+                duplicates+=1
+            else:
+                raise
+    return {"scanned_emails":len(emails),"new_jobs":len(imported),"duplicates":duplicates,"jobs":imported,
+            "notice":"Email links are unverified leads. Open each employer's official listing and mark it verified before preparing an application."}
 
 @app.get("/search/jobs")
 async def search_jobs(q: str = "software engineer Python AI", location: str = "Bengaluru", count: int = 10):
