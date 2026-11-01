@@ -74,10 +74,11 @@ def _clean_job_link(raw: str) -> str:
         if path.endswith((".woff", ".woff2", ".ttf", ".otf", ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".map")):
             return ""
         query = parse_qs(parsed.query)
-        if host.endswith("indeed.com") and path.endswith("/jobs") and "q" in query and not ({"jk", "vjk"} & query.keys()):
+        query_keys = {key.lower() for key in query}
+        if host.endswith("indeed.com") and path.endswith("/jobs") and "q" in query and not ({"jk", "vjk"} & query_keys):
             return ""
         generic_paths = {"/jobs", "/careers", "/career", "/positions", "/open-roles", "/job-search", "/search"}
-        if path in generic_paths and not ({"job", "job_id", "jobid", "gh_jid", " requisitionid"} & query.keys()):
+        if path in generic_paths and not ({"job", "job_id", "jobid", "gh_jid", "requisitionid"} & query_keys):
             return ""
         return urlunparse(parsed._replace(fragment=""))
     except (TypeError, ValueError):
@@ -100,7 +101,7 @@ def _is_specific_job_email(email: dict) -> bool:
     if "udemy" in sender or "newsletter@" in sender or "notifications@github.com" in sender:
         return False
     title_terms = re.compile(
-        r"\b(engineer|engineering|developer|development|researcher|scientist|analyst|
+        r"\b(engineer|engineering|developer|development|researcher|scientist|analyst|"
         r"architect|designer|intern|specialist|consultant|administrator|programmer|"
         r"software|backend|front[- ]end|full[- ]stack|data scientist|product manager|sde)\b",
         re.IGNORECASE,
