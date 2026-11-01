@@ -2,10 +2,10 @@ import os
 from fastapi import FastAPI,HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from app.db import init_db,add_job,list_jobs,get_job,update_job,get_activity,log_event
-from app.schemas import JobCreate,StatusUpdate
+from app.schemas import JobCreate,StatusUpdate,SubmitRequest
 from app.resume import build_resume
 from app.gmail_reader import fetch_job_emails
-from app.browser import prepare_application
+from app.browser import prepare_application, submit_application
 from app.job_search import search_public_jobs
 
 app=FastAPI(title="AI Job Application Bot",version="0.1.0")
@@ -48,6 +48,21 @@ def prepare(job_id:int):
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
     return prepare_application(j,j["resume_path"])
+@app.post("/jobs/{job_id}/submit")
+def submit(job_id:int, body:SubmitRequest):
+    if not body.confirm_submit:
+        raise HTTPException(400,"Explicit confirmation is required for each application.")
+    j=get_job(job_id)
+    if not j: raise HTTPException(404,"Job not found")
+    if not j.get("resume_path") or not os.path.exists(j["resume_path"]):
+        raise HTTPException(400,"Generate a tailored PDF first.")
+    if not j["url"].startswith("https://"):
+        raise HTTPException(400,"Only HTTPS application URLs are accepted.")
+    result=submit_application(j,j["resume_path"])
+    if result.get("status") != "submitted":
+        update_job(job_id,status="needs_manual_work")
+    return result
+
 @app.post("/jobs/{job_id}/status")
 def status(job_id:int,body:StatusUpdate):
     if not get_job(job_id): raise HTTPException(404,"Job not found")
