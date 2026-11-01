@@ -14,7 +14,11 @@ def _value(profile, label):
       (r"city|location|address", "location")]
     for pattern,key in groups:
         v=profile.get(key)
-        if re.search(pattern,label,re.I) and isinstance(v,str) and v.strip(): return v.strip()
+        if re.search(pattern,label,re.I):
+            if isinstance(v,str) and v.strip(): return v.strip()
+            if key in {"first_name","last_name"} and isinstance(profile.get("full_name"),str):
+                parts=profile["full_name"].strip().split()
+                if parts: return parts[0] if key=="first_name" else " ".join(parts[1:])
     return None
 
 def _run(page, job, resume_path, profile):
@@ -89,7 +93,7 @@ def submit_application(job,resume_path):
         candidates[0].click(timeout=10000); page.wait_for_timeout(1500)
         text=page.locator("body").inner_text(timeout=5000) or ""
         shot=f"data/application_{job['id']}_submitted.png"; page.screenshot(path=shot,full_page=True)
-        result={"status":"submitted","current_url":page.url,"confirmation_text":text[:1200],"screenshot_path":shot,"message":"Submit was clicked after your confirmation. Verify the employer confirmation page."}
+        result={"status":"submit_clicked","current_url":page.url,"confirmation_text":text[:1200],"screenshot_path":shot,"message":"Submit was clicked after your confirmation. Verify the employer confirmation page before marking this job applied."}
         browser.close()
     log_event(job["id"],"application_submit_clicked",f"URL {job['url']}; verify employer confirmation")
     return result
