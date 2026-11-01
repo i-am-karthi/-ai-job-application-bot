@@ -90,7 +90,7 @@ relevant link is present. Keep description grounded in the email excerpt.
     leads = []
     for item in data.get("jobs", []):
         try:
-            source = emails[int(item.get("source_index"))]
+            source_index = int(item.get("source_index"))\n            if source_index < 0 or source_index >= len(emails):\n                continue\n            source = emails[source_index]
         except (TypeError, ValueError, IndexError):
             continue
         url = item.get("application_url", "")
