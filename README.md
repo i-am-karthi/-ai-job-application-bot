@@ -91,3 +91,12 @@ For each job, generate the tailored PDF, choose **Prepare with AI**, review the 
 
 ## Gmail on Render
 Use the dashboard's **Connect / reconnect Gmail** link to authorize the hosted app. The callback saves a refreshable token at `GOOGLE_TOKEN_FILE`; the Gmail reader uses that token and never launches a local desktop OAuth flow. If a redeploy or restart removes the token, reconnect Gmail from the dashboard. Set `GOOGLE_TOKEN_FILE` to a location on your Render persistent disk if available. The Google OAuth client JSON belongs in the `GOOGLE_OAUTH_CLIENT_CONFIG` environment variable as valid JSON; never paste the client secret into chat or commit it to Git.
+
+
+## AI Gmail job intake
+
+The dashboard's **AI scan Gmail and add job leads** button sends only matching email subjects, sender addresses, up to 5,000 characters of each email excerpt, and links to Groq for extraction. It uses `GROQ_API_KEY` and the free-tier `openai/gpt-oss-20b` model by default. If your existing `LLM_BASE_URL` is Groq, its `LLM_API_KEY` can be reused; otherwise add a separate `GROQ_API_KEY` in Render. Never paste the key into chat or commit it.
+
+Groq's free tier has rate limits. Groq states inference data is not retained by default, but may be temporarily retained (up to 30 days) for reliability or abuse investigations unless zero-data-retention is enabled. See [Groq data controls](https://console.groq.com/docs/your-data).
+
+AI-created job leads remain unverified. Open the listing and confirm it is on the employer's official site, then click **Mark official listing verified**. Generate the PDF and prepare the application. The final submit remains a separate action requiring your confirmation; unsupported fields and CAPTCHAs need manual handling.
