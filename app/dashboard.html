@@ -20,7 +20,7 @@ button.secondary{background:#e8eefb;color:#173477}button.warn{background:#b45309
 a{color:#1d4ed8}
 </style></head>
 <body>
-<header><h1>AI Job Application Bot</h1><div>Discover → tailor PDF → prepare application → review → submit manually</div></header>
+<header><h1>AI Job Application Bot</h1><div>Discover → AI-tailored resume → fill known profile fields → review → confirm submit</div></header>
 <main>
 <section class="card"><h2>Add a job</h2>
 <form id="jobForm">
@@ -35,13 +35,13 @@ a{color:#1d4ed8}
 <section class="card"><h2>Discover jobs from Gmail</h2><p>Read-only Gmail OAuth. First use requires local Google OAuth credentials.</p>
 <label>Gmail search query</label><input id="gmailQuery" value='newer_than:14d (job OR hiring OR careers OR vacancy)'>
 <button id="gmailBtn">Read matching emails</button><div id="gmailResults"></div></section>
-<section class="card"><h2>Tracked jobs</h2><button class="secondary" id="refreshBtn">Refresh list</button><div id="jobs">Loading…</div></section>
+<section class="card"><h2>Tracked jobs</h2><p>Prepare fills clear matches from your saved profile. Review the field summary and screenshot before submitting. Unknown, sensitive, consent, and checkbox questions stay for you. Career sites vary, so some applications need manual work.</p><button class="secondary" id="refreshBtn">Refresh list</button><div id="jobs">Loading…</div></section>
 <section class="card"><h2>Activity / messages</h2><div id="message">Ready.</div></section>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});let data;try{data=await r.json()}catch{data=await r.text()}if(!r.ok)throw new Error(typeof data==='string'?data:JSON.stringify(data));return data}
-function msg(x){$('message').textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
+function msg(x){$('message').textContent=typeof x==='string'?x:JSON.stringify(x,null,2);if(x&&x.screenshot_url){const a=document.createElement('a');a.href=x.screenshot_url;a.target='_blank';a.rel='noopener';a.textContent='Open application screenshot';$('message').appendChild(document.createElement('br'));$('message').appendChild(a)}}
 $('jobForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{const x=await api('/jobs',{method:'POST',body:JSON.stringify(d)});msg({added:x});e.target.reset();await refresh()}catch(err){msg(err.message)}});
 $('refreshBtn').onclick=refresh;
 $('gmailBtn').onclick=async()=>{ $('gmailResults').textContent='Reading Gmail…';try{const q=encodeURIComponent($('gmailQuery').value);const x=await api('/gmail/jobs?query='+q);$('gmailResults').innerHTML='<p>Found '+x.count+' email(s). Review each message and verify jobs on official employer sites before adding.</p>';x.emails.forEach(e=>{const d=document.createElement('details');const s=document.createElement('summary');s.textContent=e.subject+' — '+e.from;d.appendChild(s);const p=document.createElement('pre');p.style.whiteSpace='pre-wrap';p.textContent=(e.body_excerpt||'').slice(0,3000)+'\\n\\nLinks:\\n'+(e.links||[]).join('\\n');d.appendChild(p);$('gmailResults').appendChild(d)})}catch(err){$('gmailResults').textContent=err.message}};
