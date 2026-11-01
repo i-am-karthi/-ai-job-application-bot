@@ -28,3 +28,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai_compatible")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "")
+
+# Separate free-tier Groq endpoint for Gmail lead extraction only
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "") or (LLM_API_KEY if "api.groq.com" in LLM_BASE_URL.lower() else "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
