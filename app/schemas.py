@@ -8,3 +8,6 @@ class JobCreate(BaseModel):
     source:str="manual"
 class StatusUpdate(BaseModel):
     status:str
+
+class SubmitRequest(BaseModel):
+    confirm_submit: bool = False
