@@ -16,6 +16,28 @@ def startup():
 def home():
     with open(os.path.join(os.path.dirname(__file__), "dashboard.html"), encoding="utf-8") as f:
         return f.read()
+@app.get("/profile")
+def get_profile():
+    if not os.path.exists(PROFILE_PATH):
+        return {"configured":False,"profile":{}}
+    try:
+        with open(PROFILE_PATH,encoding="utf-8") as f: profile=json.load(f)
+        return {"configured":True,"profile":profile}
+    except (OSError,json.JSONDecodeError):
+        raise HTTPException(500,"Saved profile JSON cannot be read.")
+
+@app.put("/profile")
+def save_profile(profile:dict):
+    if not isinstance(profile,dict) or not profile:
+        raise HTTPException(400,"Provide a non-empty JSON object with verified profile details.")
+    os.makedirs(os.path.dirname(PROFILE_PATH) or ".",exist_ok=True)
+    try:
+        with open(PROFILE_PATH,"w",encoding="utf-8") as f:
+            json.dump(profile,f,ensure_ascii=False,indent=2)
+    except OSError:
+        raise HTTPException(500,"Could not save the profile on this service.")
+    return {"configured":True,"message":"Profile saved. Review every fact before generating a resume."}
+
 @app.get("/jobs")
 def jobs(): return list_jobs()
 @app.post("/jobs")
@@ -93,7 +115,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 from google_auth_oauthlib.flow import Flow
-from app.config import GOOGLE_TOKEN_FILE
+from app.config import GOOGLE_TOKEN_FILE, PROFILE_PATH
 
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 APP_USERNAME = os.getenv("APP_USERNAME", "")
