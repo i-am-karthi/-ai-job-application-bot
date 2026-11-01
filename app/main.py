@@ -92,7 +92,7 @@ app.add_middleware(
     same_site="lax",
 )
 
-def create_oauth_flow(request: Request, state=None):
+def create_oauth_flow(request: Request, state=None, code_verifier=None):
     if not SESSION_SECRET:
         raise HTTPException(503, "Set SESSION_SECRET in Render.")
     if not GOOGLE_CLIENT_CONFIG:
@@ -101,7 +101,12 @@ def create_oauth_flow(request: Request, state=None):
         config = json.loads(GOOGLE_CLIENT_CONFIG)
     except json.JSONDecodeError:
         raise HTTPException(500, "Google OAuth client config is not valid JSON.")
-    flow = Flow.from_client_config(config, scopes=GOOGLE_SCOPES, state=state)
+    flow = Flow.from_client_config(
+        config,
+        scopes=GOOGLE_SCOPES,
+        state=state,
+        code_verifier=code_verifier,
+    )
     flow.redirect_uri = str(request.base_url).rstrip("/") + "/gmail/callback"
     return flow
 
@@ -114,6 +119,7 @@ def gmail_connect(request: Request):
         include_granted_scopes="true",
     )
     request.session["oauth_state"] = state
+    request.session["oauth_code_verifier"] = flow.code_verifier
     return RedirectResponse(url)
 
 @app.get("/gmail/callback")
@@ -125,7 +131,10 @@ def gmail_callback(
     expected = request.session.pop("oauth_state", None)
     if not expected or not hmac.compare_digest(str(expected), str(state)):
         raise HTTPException(400, "OAuth state mismatch. Retry Gmail connection.")
-    flow = create_oauth_flow(request, state=state)
+    code_verifier = request.session.pop("oauth_code_verifier", None)
+    if not code_verifier:
+        raise HTTPException(400, "OAuth verifier missing. Retry Gmail connection.")
+    flow = create_oauth_flow(request, state=state, code_verifier=code_verifier)
     flow.fetch_token(code=code)
     os.makedirs(os.path.dirname(GOOGLE_TOKEN_FILE) or ".", exist_ok=True)
     with open(GOOGLE_TOKEN_FILE, "w", encoding="utf-8") as f:
