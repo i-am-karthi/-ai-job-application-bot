@@ -47,7 +47,16 @@ def prepare(job_id:int):
     if not j: raise HTTPException(404,"Job not found")
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
-    return prepare_application(j,j["resume_path"])
+    result=prepare_application(j,j["resume_path"])
+    result["screenshot_url"]=f"/jobs/{job_id}/application-preview"
+    return result
+@app.get("/jobs/{job_id}/application-preview")
+def application_preview(job_id:int):
+    if not get_job(job_id): raise HTTPException(404,"Job not found")
+    path=f"data/application_{job_id}.png"
+    if not os.path.exists(path): raise HTTPException(404,"Prepare the application first.")
+    return FileResponse(path,media_type="image/png",filename=f"application-{job_id}-preview.png")
+
 @app.post("/jobs/{job_id}/submit")
 def submit(job_id:int, body:SubmitRequest):
     if not body.confirm_submit:
@@ -59,6 +68,8 @@ def submit(job_id:int, body:SubmitRequest):
     if not j["url"].startswith("https://"):
         raise HTTPException(400,"Only HTTPS application URLs are accepted.")
     result=submit_application(j,j["resume_path"])
+    if result.get("screenshot_path"):
+        result["screenshot_url"]=f"/jobs/{job_id}/application-preview"
     if result.get("status") != "submitted":
         update_job(job_id,status="needs_manual_work")
     return result
