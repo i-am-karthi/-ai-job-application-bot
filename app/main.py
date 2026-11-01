@@ -2,10 +2,10 @@ import os
 from fastapi import FastAPI,HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from app.db import init_db,add_job,list_jobs,get_job,update_job,get_activity,log_event
-from app.schemas import JobCreate,StatusUpdate
+from app.schemas import JobCreate,StatusUpdate,SubmitRequest
 from app.resume import build_resume
 from app.gmail_reader import fetch_job_emails
-from app.browser import prepare_application
+from app.browser import prepare_application, submit_application
 from app.job_search import search_public_jobs
 
 app=FastAPI(title="AI Job Application Bot",version="0.1.0")
@@ -16,6 +16,28 @@ def startup():
 def home():
     with open(os.path.join(os.path.dirname(__file__), "dashboard.html"), encoding="utf-8") as f:
         return f.read()
+@app.get("/profile")
+def get_profile():
+    if not os.path.exists(PROFILE_PATH):
+        return {"configured":False,"profile":{}}
+    try:
+        with open(PROFILE_PATH,encoding="utf-8") as f: profile=json.load(f)
+        return {"configured":True,"profile":profile}
+    except (OSError,json.JSONDecodeError):
+        raise HTTPException(500,"Saved profile JSON cannot be read.")
+
+@app.put("/profile")
+def save_profile(profile:dict):
+    if not isinstance(profile,dict) or not profile:
+        raise HTTPException(400,"Provide a non-empty JSON object with verified profile details.")
+    os.makedirs(os.path.dirname(PROFILE_PATH) or ".",exist_ok=True)
+    try:
+        with open(PROFILE_PATH,"w",encoding="utf-8") as f:
+            json.dump(profile,f,ensure_ascii=False,indent=2)
+    except OSError:
+        raise HTTPException(500,"Could not save the profile on this service.")
+    return {"configured":True,"message":"Profile saved. Review every fact before generating a resume."}
+
 @app.get("/jobs")
 def jobs(): return list_jobs()
 @app.post("/jobs")
@@ -45,9 +67,36 @@ def get_resume(job_id:int):
 def prepare(job_id:int):
     j=get_job(job_id)
     if not j: raise HTTPException(404,"Job not found")
+    if not os.path.exists(PROFILE_PATH): raise HTTPException(400,"Save your verified candidate profile first.")
     if not j.get("resume_path") or not os.path.exists(j["resume_path"]): raise HTTPException(400,"Generate PDF first.")
     if not j["url"].startswith("https://"): raise HTTPException(400,"Only HTTPS application URLs are accepted.")
-    return prepare_application(j,j["resume_path"])
+    result=prepare_application(j,j["resume_path"])
+    result["screenshot_url"]=f"/jobs/{job_id}/application-preview"
+    return result
+@app.get("/jobs/{job_id}/application-preview")
+def application_preview(job_id:int):
+    if not get_job(job_id): raise HTTPException(404,"Job not found")
+    path=f"data/application_{job_id}.png"
+    if not os.path.exists(path): raise HTTPException(404,"Prepare the application first.")
+    return FileResponse(path,media_type="image/png",filename=f"application-{job_id}-preview.png")
+
+@app.post("/jobs/{job_id}/submit")
+def submit(job_id:int, body:SubmitRequest):
+    if not body.confirm_submit:
+        raise HTTPException(400,"Explicit confirmation is required for each application.")
+    j=get_job(job_id)
+    if not j: raise HTTPException(404,"Job not found")
+    if not j.get("resume_path") or not os.path.exists(j["resume_path"]):
+        raise HTTPException(400,"Generate a tailored PDF first.")
+    if not j["url"].startswith("https://"):
+        raise HTTPException(400,"Only HTTPS application URLs are accepted.")
+    result=submit_application(j,j["resume_path"])
+    if result.get("screenshot_path"):
+        result["screenshot_url"]=f"/jobs/{job_id}/application-preview"
+    if result.get("status") != "submitted":
+        update_job(job_id,status="needs_manual_work")
+    return result
+
 @app.post("/jobs/{job_id}/status")
 def status(job_id:int,body:StatusUpdate):
     if not get_job(job_id): raise HTTPException(404,"Job not found")
@@ -67,7 +116,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 from google_auth_oauthlib.flow import Flow
-from app.config import GOOGLE_TOKEN_FILE
+from app.config import GOOGLE_TOKEN_FILE, PROFILE_PATH
 
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 APP_USERNAME = os.getenv("APP_USERNAME", "")
