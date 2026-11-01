@@ -100,9 +100,9 @@ def _is_specific_job_email(email: dict) -> bool:
     if "udemy" in sender or "newsletter@" in sender or "notifications@github.com" in sender:
         return False
     title_terms = re.compile(
-        r"\\b(engineer|engineering|developer|development|researcher|scientist|analyst|"
+        r"\b(engineer|engineering|developer|development|researcher|scientist|analyst|
         r"architect|designer|intern|specialist|consultant|administrator|programmer|"
-        r"software|backend|front[- ]end|full[- ]stack|data scientist|product manager|sde)\\b",
+        r"software|backend|front[- ]end|full[- ]stack|data scientist|product manager|sde)\b",
         re.IGNORECASE,
     )
     return bool(title_terms.search(subject) or title_terms.search(combined))
@@ -124,13 +124,16 @@ def extract_job_leads(emails: list[dict]) -> list[dict]:
         ))
         if not links:
             continue
-        candidate_links[index] = links
+        usable_links = [url for url in links if len(url) <= 500][:3]
+        if not usable_links:
+            continue
+        candidate_links[index] = usable_links
         evidence.append({
             "source_index": index,
             "subject": str(email.get("subject", ""))[:240],
             "sender": str(email.get("from", ""))[:180],
             "excerpt": str(email.get("body_excerpt", "") or "")[:600],
-            "links": [url for url in links if len(url) <= 500][:3],
+            "links": usable_links,
         })
         if len(evidence) >= 12:
             break
